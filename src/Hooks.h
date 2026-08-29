@@ -2,11 +2,17 @@
 
 namespace ClassicParalysis
 {
+	namespace detail
+	{
+		void freeze(RE::Actor* a_actor);
+		void unfreeze(RE::Actor* a_actor);
+		bool do_not_freeze(RE::Actor* a_actor);
+		bool is_invalid_effect(RE::ParalysisEffect* a_this);
+	}
+
 	namespace Effect
 	{
-		inline RE::FormID SaadiaID{ 0x000D7505 };
-
-	    void Install();
+		void Install();
 	}
 
 	namespace Fixes

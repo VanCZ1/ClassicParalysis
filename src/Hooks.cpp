@@ -3,66 +3,67 @@
 
 namespace ClassicParalysis
 {
-	namespace detail
+	void detail::freeze(RE::Actor* a_actor)
 	{
-		void freeze(RE::Actor& a_actor)
-		{
-			a_actor.PauseCurrentDialogue();
-			a_actor.InterruptCast(false);
-			a_actor.StopInteractingQuick(true);
+		a_actor->StopCurrentDialogue();
+		a_actor->InterruptCast(false);
+		a_actor->StopInteractingQuick(true);
 
-			if (const auto currentProcess = a_actor.currentProcess) {
-				currentProcess->ClearMuzzleFlashes();
-			}
-
-			a_actor.boolFlags.reset(RE::Actor::BOOL_FLAGS::kShouldAnimGraphUpdate);
-
-			if (const auto charController = a_actor.GetCharController(); charController) {
-				charController->flags.set(RE::CHARACTER_FLAGS::kNotPushable);
-
-				charController->flags.reset(RE::CHARACTER_FLAGS::kRecordHits);
-				charController->flags.reset(RE::CHARACTER_FLAGS::kHitFlags);
-			}
-
-			a_actor.EnableAI(false);
-			a_actor.StopMoving(1.0f);
+		if (const auto currentProcess = a_actor->currentProcess) {
+			currentProcess->ClearMuzzleFlashes();
 		}
 
-		void unfreeze(RE::Actor& a_actor)
-		{
-			a_actor.boolFlags.set(RE::Actor::BOOL_FLAGS::kShouldAnimGraphUpdate);
+		a_actor->boolFlags.reset(RE::Actor::BOOL_FLAGS::kShouldAnimGraphUpdate);
 
-			if (const auto charController = a_actor.GetCharController()) {
-				charController->flags.reset(RE::CHARACTER_FLAGS::kNotPushable);
-
-				charController->flags.set(RE::CHARACTER_FLAGS::kRecordHits);
-				charController->flags.set(RE::CHARACTER_FLAGS::kHitFlags);
-			}
-
-			a_actor.EnableAI(true);
+		if (const auto charController = a_actor->GetCharController()) {
+			charController->flags.set(RE::CHARACTER_FLAGS::kNotPushable, RE::CHARACTER_FLAGS::kNoCharacterCollisions);
+			charController->flags.reset(RE::CHARACTER_FLAGS::kRecordHits, RE::CHARACTER_FLAGS::kHitFlags, RE::CHARACTER_FLAGS::kHitDamage);
+			charController->SetLinearVelocityImpl(0.0f);
 		}
+
+		a_actor->EnableAI(false);
+		a_actor->StopMoving(1.0f);
+	}
+
+	void detail::unfreeze(RE::Actor* a_actor)
+	{
+		a_actor->boolFlags.set(RE::Actor::BOOL_FLAGS::kShouldAnimGraphUpdate);
+
+		if (const auto charController = a_actor->GetCharController()) {
+			charController->flags.reset(RE::CHARACTER_FLAGS::kNotPushable, RE::CHARACTER_FLAGS::kNoCharacterCollisions);
+			charController->flags.set(RE::CHARACTER_FLAGS::kRecordHits, RE::CHARACTER_FLAGS::kHitFlags, RE::CHARACTER_FLAGS::kHitDamage);
+			charController->SetLinearVelocityImpl(0.0f);
+		}
+
+		a_actor->EnableAI(true);
+	}
+
+	bool detail::do_not_freeze(RE::Actor* a_actor)
+	{
+		return a_actor->GetFormID() == 0x000D7505  // Saadia
+		       || a_actor->HasKeywordString("ClassicParalysis_NoFreeze");
+	}
+
+	bool detail::is_invalid_effect(RE::ParalysisEffect* a_this)
+	{
+		if (const auto spell = a_this->spell) {
+			static auto frostKeyword = RE::TESForm::LookupByEditorID<RE::BGSKeyword>("MagicDamageFrost");
+
+			const auto settings = Settings::GetSingleton();
+			if ((spell->HasKeyword(frostKeyword) && !settings->frostSpells) || !settings->paralysisSpells) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	namespace Effect
 	{
-		bool is_invalid_effect(RE::ParalysisEffect* a_this)
-		{
-            if (const auto spell = a_this->spell) {
-				static auto frostKeyword = RE::TESForm::LookupByEditorID<RE::BGSKeyword>("MagicDamageFrost");
-
-                const auto settings = Settings::GetSingleton();
-				if (spell->HasKeyword(frostKeyword) && !settings->frostSpells || !settings->paralysisSpells) {
-					return true;
-				}
-			}
-			return false;
-		}
-
-	    struct Start
+		struct Start
 		{
 			static void thunk(RE::ParalysisEffect* a_this)
 			{
-				if (is_invalid_effect(a_this)) {
+				if (detail::is_invalid_effect(a_this)) {
 					return func(a_this);
 				}
 
@@ -71,11 +72,11 @@ namespace ClassicParalysis
 				const auto actor = ref ? ref->As<RE::Actor>() : nullptr;
 
 				if (actor) {
-					if (actor->GetFormID() == SaadiaID) {
+					if (detail::do_not_freeze(actor)) {
 						func(a_this);
 					} else if (!actor->IsDead()) {
 						if (!actor->IsPlayerRef()) {
-							detail::freeze(*actor);
+							detail::freeze(actor);
 						} else {
 							actor->SetLifeState(RE::ACTOR_LIFE_STATE::kRestrained);
 						}
@@ -83,13 +84,14 @@ namespace ClassicParalysis
 				}
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
+			static inline constexpr std::size_t            idx = 0x14;
 		};
 
 		struct Finish
 		{
 			static void thunk(RE::ParalysisEffect* a_this)
 			{
-				if (is_invalid_effect(a_this)) {
+				if (detail::is_invalid_effect(a_this)) {
 					return func(a_this);
 				}
 
@@ -98,11 +100,11 @@ namespace ClassicParalysis
 				const auto actor = ref ? ref->As<RE::Actor>() : nullptr;
 
 				if (actor) {
-					if (actor->GetFormID() == SaadiaID) {
+					if (detail::do_not_freeze(actor)) {
 						func(a_this);
 					} else {
 						if (!actor->IsPlayerRef()) {
-							detail::unfreeze(*actor);
+							detail::unfreeze(actor);
 						} else {
 							actor->SetLifeState(RE::ACTOR_LIFE_STATE::kAlive);
 						}
@@ -111,12 +113,13 @@ namespace ClassicParalysis
 				}
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
+			static inline constexpr std::size_t            idx = 0x15;
 		};
 
 		void Install()
 		{
-			stl::write_vfunc<RE::ParalysisEffect, 0x14, Start>();
-			stl::write_vfunc<RE::ParalysisEffect, 0x15, Finish>();
+			stl::write_vfunc<RE::ParalysisEffect, Start>();
+			stl::write_vfunc<RE::ParalysisEffect, Finish>();
 		}
 	}
 
@@ -128,7 +131,7 @@ namespace ClassicParalysis
 			{
 				const auto result = func(a_actor);
 				if (result && a_actor && !a_actor->IsAIEnabled()) {
-					detail::unfreeze(*a_actor);
+					detail::unfreeze(a_actor);
 				}
 				return result;
 			}
@@ -141,7 +144,7 @@ namespace ClassicParalysis
 			{
 				const auto processLevel = func(a_actor);
 				if (a_actor && !a_actor->IsAIEnabled()) {
-					detail::unfreeze(*a_actor);
+					detail::unfreeze(a_actor);
 					return -1;
 				}
 				return processLevel;

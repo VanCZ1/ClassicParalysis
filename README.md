@@ -17,23 +17,23 @@ SKSE plugin that makes all paralysis spells freeze the target in place
 	* Needed for SSE/AE
 
 ## Building
-
+```
 git clone https://github.com/powerof3/ClassicParalysis.git
 cd ClassicParalysis
 git submodule update --init --recursive
-
+```
 
 ### SSE (1.5.97)
-
+```
 cmake --preset vs2022-se
 cmake --build --preset vs2022-se
-
+```
 
 ### AE (1.6.1170+)
-
+```
 cmake --preset vs2022-ae
 cmake --build --preset vs2022-ae
-
+```
 
 Replace `vs2022` with `vs2026` to build with Visual Studio 2026.
 

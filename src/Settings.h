@@ -12,8 +12,6 @@ public:
 		store->Save();
 	}
 
-	void LoadForms();
-
 	// members
 	static constexpr auto path = R"(Data\SKSE\Plugins\po3_ClassicParalysis.ini)"sv;
 
